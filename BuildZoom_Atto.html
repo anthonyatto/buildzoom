@@ -516,19 +516,10 @@ keepIn &lt;- keepIn[!keepIn %in% anthonyOut]
 # remove low coverage features from data
 p3data &lt;- p3data %&gt;% dplyr::select_(.dots = keepIn)
 p3data$service_request_won &lt;- as.factor(p3data$service_request_won)</code></pre>
-<p>After removing features based on the above rules, there are now <code>p ncol(p3data)</code> features that will be used to develop a model.</p>
 <pre class="r"><code># identify which variables would still be in the model if anthony did not intervene
 compare &lt;- anthonyOut[!anthonyOut %in% lowCoverage]
-compare &lt;- compare[!compare %in% tooManyLevels]
-compare</code></pre>
-<pre><code>##  [1] &quot;MM_FIPS_STATE_CODE&quot;      &quot;SA_PARCEL_NBR_PRIMARY&quot;  
-##  [3] &quot;SA_PARCEL_NBR_CHANGE_YR&quot; &quot;SA_YR_APN_ADDED&quot;        
-##  [5] &quot;SA_SITE_HOUSE_NBR&quot;       &quot;SA_MAIL_HOUSE_NBR&quot;      
-##  [7] &quot;SA_LOT_NBR_1&quot;            &quot;SA_BLK_NBR_1&quot;           
-##  [9] &quot;SA_DOC_NBR_FMT&quot;          &quot;SA_DOC_NBR_NOVAL&quot;       
-## [11] &quot;SA_GEO_QLTY_CODE&quot;        &quot;FILLER&quot;                 
-## [13] &quot;CRLF&quot;</code></pre>
-<p>As a side note, only 13 additional features would have been included in the model without my manual removal.</p>
+compare &lt;- compare[!compare %in% tooManyLevels]</code></pre>
+<p>After removing features based on the above rules, there are now <strong>86</strong> features that will be used to develop a model. As a side note, only <strong>13</strong> additional features would have been included in the model without my manual removal (i.e. a purely rules based feature selection).</p>
 <p>Next, missing values are imputed.</p>
 <pre class="r"><code># create training set
 train &lt;- sample(1:nrow(p3data), nrow(p3data)*.8)
@@ -621,7 +612,8 @@ kable(importance %&gt;% dplyr::arrange(desc(MeanDecreaseAccuracy)) %&gt;% dplyr:
 </li>
 <li>Examine training and test errors to determine if more data or more features are needed.</li>
 </ul>
-<p><strong>If you have any further questions about this assignment, you can simply hire me.</strong></p>
+<hr />
+<p><strong>If you have any further questions about this assignment, simply hire me.</strong></p>
 </div>
 </div>
 </div>

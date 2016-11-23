@@ -290,15 +290,12 @@ p3data <- p3data %>% dplyr::select_(.dots = keepIn)
 p3data$service_request_won <- as.factor(p3data$service_request_won)
 ```
 
-After removing features based on the above rules, there are now `p ncol(p3data)` features that will be used to develop a model.
-
 ```{r p3biasCheck}
 # identify which variables would still be in the model if anthony did not intervene
 compare <- anthonyOut[!anthonyOut %in% lowCoverage]
 compare <- compare[!compare %in% tooManyLevels]
-compare
 ```
-As a side note, only `r length(compare)` additional features would have been included in the model without my manual removal.  
+After removing features based on the above rules, there are now **`r ncol(p3data)`** features that will be used to develop a model.  As a side note, only **`r length(compare)`** additional features would have been included in the model without my manual removal (i.e. a purely rules based feature selection).  
 
 Next, missing values are imputed.
 
@@ -360,5 +357,6 @@ If given two weeks, I would improve the model in the following ways.
  - Examine training and test errors to determine if more data or more features are needed.
 
   
-  
-**If you have any further questions about this assignment, you can simply hire me.**
+* * * * * * *
+    
+**If you have any further questions about this assignment, simply hire me.**
