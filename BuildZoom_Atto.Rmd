@@ -1,0 +1,364 @@
+---
+title: "Build Zoom Assignment"
+author: "Anthony Atto"
+
+output:
+  html_document:
+    code_folding: hide
+    toc: true
+    toc_float:
+      collapsed: false
+    md_extensions: +raw_html
+---
+
+```{r setup, warning=FALSE, message=FALSE}
+# set knitr options
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+# load packages
+require(rmarkdown)
+require(stringr)
+require(lubridate)
+require(knitr)
+require(readxl)
+require(randomForest)
+require(htmltools)
+require(dplyr)
+
+# set seed
+set.seed(150)
+```
+
+```{r data}
+# read in and clean data
+# contractors
+contractors <- read.csv("/Users/ARA/Dropbox/Beyond/buildzoom/contractors.csv", header =TRUE)
+
+# notes
+notes <- read.csv("/Users/ARA/Dropbox/Beyond/buildzoom/notes.csv", header = TRUE)
+notes$date <- as.Date(notes$date, format = "%m/%d/%y")
+
+# part 3 data descriptions
+p3descriptions <- read_excel("/Users/ARA/Dropbox/Beyond/buildzoom/p3descriptions.xlsx",
+                             col_names = TRUE, skip = 1)
+
+# part 3 data set
+p3data <- read.csv("/Users/ARA/Dropbox/Beyond/buildzoom/p3dataset.csv", header=TRUE, stringsAsFactors = FALSE, na.strings = "NULL", as.is = FALSE)
+```
+
+## Part I
+### Question 1  
+What *share* of contractors recieved at least one check in?
+```{r p1q1}
+atLeastOneIn2016 <- function(x) {
+  # start with notes table
+  notes %>% 
+    # filter to notes in the year of interest
+    dplyr::filter(year(date) == 2016,
+    # filter to all notes that have #checkin tab
+    str_detect(note, "#checkin")) %>%
+    # select the unique contractors only
+    dplyr::select(contractor_id) %>% unique() %>% 
+    # count the unique rows and divide them by the number of contractors in database
+    nrow() / nrow(contractors)
+}
+atLeastOneIn2016(x)
+```
+
+### Question 2  
+*Which* contractors recieved at least one checkin in 2016?
+```{r p1q2}
+WhichAtLeastOneIn2016 <- function(x) {
+  # start with notes table
+  notes %>% 
+    # filter to notes in the year of interest
+    dplyr::filter(year(date) == 2016,
+    # filter to all notes that have #checkin tab
+    str_detect(note, "#checkin")) %>%
+    # select the unique contractors only
+    dplyr::select(contractor_id) %>% unique() %>% 
+    # join the shortened table with the contractor table
+    left_join(contractors) %>% dplyr::select(Contractor = business_name)
+}
+WhichAtLeastOneIn2016(x)
+```
+
+While the functions above query `r` `data.frames`, I can easily connect to a MySQL database using [RMySQL](https://cran.r-project.org/web/packages/RMySQL/index.html) and continue to use the `dplyr` syntax to query data (as shown in [this](http://www.jason-french.com/blog/2014/07/03/using-r-with-mysql-databases/) post)
+
+## Part II
+Let $j \in J$ denote projects and $i \in I$ denote contractors.
+$$L_{ij} = 1 \text{ if contractor }i \text{ was offered project }j; L_{ij} = 0 \text{ otherwise.}$$ 
+$$O_{ij} = 1 \text{ if contractor }i \text{ opted in to project }j; O_{ij} = 0 \text{ otherwise.}$$
+$$B_{ij} = 1 \text{ if contractor }i \text{ bid on project }j; B_{ij} = 0 \text{ otherwise.}$$
+$$H_{ij} = 1 \text{ if contractor }i \text{ was hired for project }j; H_{ij} = 0 \text{ otherwise.}$$
+
+
+### Question 1  
+$$OIR^{1} = |\{j \in J | \sum_{i} O_{ij} > 0 \} | / |J|$$
+$$OIR^{2} = |I|^{-1}\sum_{i \in I} \frac{\sum_{j \in J} O_{ij}}{\sum_{j \in J} L_{ij}}$$
+$$OIR^{3} = \frac{\sum_{i \in I} \sum_{j \in J} O_{ij}}{\sum_{i \in I} \sum_{j \in J} L_{ij}}$$  
+
+Let me first state that notation is the bane of every grad student's existence.  Every teacher, textbook, and student has their preferred notational standards.  I can't tell if this notation attempts to be proper (nobody *ever* takes the time to put the $x \in X$) or is trying to be intentionally confusing.  In any case, my assumptions and notes are as follows.
+
+ - Capital letters ($I$ and $J$) represent the total number of contractors and projects, respectively.
+ - Contractors can opt in to a project without it being offered to them.  (I assume they can browse available projects, but BuildZoom 'offers' projects based on some type of matching criteria.)
+ - There is an extra | bracket in $OIR^{1}$.  I don't think it makes a difference, because there are no negative values.
+ - The $>0$ in $\sum_{i} O_{ij} > 0$ is superfluous.
+ 
+$OIR^{1}$ is an *unconditional* opt in rate.  In plain english, this number represents the average number of opt ins per project.  Given no other information or conditions, BuildZoom could say, "On average, each project gets `X` opt ins."  If this is a number on the order of 3-5, it might be used for marketing to customers.
+  
+As far as I can tell, $OIR^{2}$ and $OIR^{3}$ are the same.  It is some type of ratio between opt ins and offers.  It is not useful because you cannot tell if there is a higher opt in rate for offers ($L_{ij}=1$) verse no offers ($L_{ij}=0$).  Therefore, it's meaning and usefulness is diluted.  
+  
+What would be more useful and interesting is if you compared the following.
+
+$$OIR^{Anthony} = \frac{\sum O_{ij}\ |\ L_{ij}=1}{\sum L_{ij}}$$
+$$OIR^{Atto} = \frac{\sum O_{ij}\ |\ L_{ij}=0}{J - \sum L_{ij}}$$
+
+This, would represent a *conditional* opt in rate.  Given that the contractor was offered the project (or not), how do their opt in rates differ?  
+
+### Question 2
+To evaluate the effectiveness of engagement tactics (text message, e-mail, phone call), a random controlled experiment would be needed.  A retrospective review is possible (sampling historical observations), but given the low cost of acquring new data, a random controlled experiment would be preferred for higher reliability in results (eliminating any concerns about those darned confounding variables.)  
+  
+Effectiveness can be defined many ways.  For this assignment, I will define effective as getting a contractor to login to the BuildZoom website within 7 days of the engagement.
+
+Assumptions:
+Using the example `notes` table from above, I will assume that there might also be a #phone, #text, or #email tag that accompanies every #checkin tag.  
+
+#### 2.a  
+In words, my hypothesis would be 'all engagement types are equal.'  In mathematical notation,
+$$H_{0}:  \mu_{P} = \mu_{T} = \mu_{E} = \mu_{0}$$
+$$H_{a}: \mu{i} \neq \mu_{j} \text{ for any } i, j.$$
+where $\mu_{i} = \frac{n_{i}}{n}$ and $n=$ number of random samples.
+
+Approach:  
+  
+1.  Randomly sample $n$ contractors from the database.  For this particular experiment, I would use $n=600$ engagements.
+2.  Randomly assign one of four engagement types - text, phone, e-mail, or no engagement in equal proportions ($\frac{n}{4}$) to each of the contractors.
+3.  Execute engagements.  In an ideal world, they are all done on the same day at the same time.
+4.  Show results in a cross table.
+```{r htmlTable, echo=FALSE}
+knitr::asis_output(htmltools::htmlPreserve("
+<style>
+table, th, td {
+    border: 1px solid black;
+    padding: 3px;
+}
+</style>
+
+<div align='center'>
+<table>
+  <tr>
+    <th>engagement</th>
+    <th>response</th>
+  </tr>
+  <tr>
+    <td>text</td>
+    <td><i>n<sub>1</sub></i></td>
+  </tr>
+  <tr>
+    <td>phone</td>
+    <td>n<sub>2</sub></td>
+  </tr>
+  <tr>
+    <td>e-mail</td>
+    <td>n<sub>3</sub></td>
+  </tr>
+  <tr>
+    <td>no engagement</td>
+    <td>n<sub>4</sub></td>
+  </tr>
+</table>
+</div>
+"))
+```  
+5.  Calculate significance (is one engagement type significantly more effective than the other?) using Pearson's $\chi^{2}$ statistic.
+  
+#### 2.b  
+The experiment would deliver empirical results ranking the order of 'effectiveness' (as defined by returning to the website in 7 days) of the engagement type.
+
+#### 2.c  
+Intuitively, I would expect phone calls to be the most effective, followed by texts, e-mails, and no engagement.  Phone calls from a human are always nice.  Texts are usually given more priority and prominence than emails.  Emails can be easily deleted (or worse, autodeleted).  
+
+#### 2.d  
+Steps involved in implementing the evaluation:  
+  
+1.  Develop Hypothesis
+    + 1 hour framing session to identify hypothesis
+2.  Design Experiment
+    + 8 hours to design a quality experimental and document the procedures to do so.    Spending the time up front to ensure experiment is designed well always pays dividends.  For example, multiple questions (hypothesis) might be tested using the same experiment if designed appropriately.
+3.  Execute Engagements
+    + 7 days.  This is just based on my definition of the hypothesis.  
+4.  Collect Results
+    + 2 hours to develop simple script to collect results.  This could be done in parallel with Step 3.
+5.  Conduct Analysis
+    + 2-3 days to clean and wrangle data, conduct statistical analysis, and develop findings.
+6.  Presentat Results  
+    + 1 day to develop a report.
+  
+ 
+#### 2.e  
+First - a comment.  To often, people start too big with their experiment/model/analysis.  They take a lot of time with their initial implementation and i) end up taking longer than expected because they get hung up on something or ii) have difficulty pivoting after reviewing results because they spent so much time up front.   Instead, I prefer to start small (a simple experiment) and iteratively improve after the fact.  For example, after reviewing and sharing the initial results, I might improve upon the analysis in a few ways.  I could validate the experiment by looking at historical data or I might analyze different factors that weren't initially part of the experiments design (e.g. contractor size or contractor locations).  
+
+Without any further dancing around your actual question, I would
+  
+ - Cut the time frame for contractors visiting the site.  
+ - Conduct a Bayesian analysis with historical data (no time wasted on experimental design or data collection).  Given that someone visited the website, what is the probability that they had an engagement within the seven days prior?  
+  
+### Question 3  
+#### 3.a, 3.b, 3.c
+I would define different *desired responses* for engagements.  The actual metric(s) would be a few close variants of what I proposed in Part II, Question 1.
+
+For example, a highly engaged contractor (visits website often but doesn't bid) might need an engagement that leads them to bid.  A contractor that does lots of work (determined via permit data) but rarely visits the site might need an engagement to return to the site.  
+
+Defining what the desired response is of each engagement (do we want contractors to visit the site?  do we want contractors to bid more often?)  makes the problem a *supervised learning* problem, which is far easier and better defined than the an *unsupervised learning* problem whethere there are features but no response.
+
+The metric is useful because it brings *definition* to what is desired from an engagement.  Right now, it seems just that "engagements = good."  With better definition, engagements can be more efficiently allocated.  
+
+## Part III  
+### Question 1  
+Ultimately, this is *feature selection* question.  Given the nature of the features available (some of it numeric, others categorical, some of it missing), I would use a random forest to identify the most useful features.  If the categorical features available had fewer levels (number of unique values per categorical feature), I might be able to use a multiple logistic regression model or ADA Boost.
+
+Before fitting the model, I do some basic data cleaning.  Because I need to impute values, I need to make sure that all feature classes are `factor` or `numeric`.  I intentionally turned some numeric features into factors because they are better suited as factors.  For example, even though some of the `*_CODE_*` features are provided as integers, the integers don't really represent numbers, they represent categorical factors.  
+
+```{r p3dataClean}
+# identify current and desired feature classes and store in a data.frame
+classID <- function(x) {
+  classes <- lapply(p3data, class) %>% unlist()
+  classes <- data.frame(Feature = classes %>% names(), currentClass = classes)
+  rownames(classes) <- NULL
+  classes <- left_join(classes, p3descriptions %>% dplyr::select(`Field Name`, desiredClass = `Anthony - Data Type`), by = c("Feature" = "Field Name"))
+  classes
+}
+classes <- classID(x)
+
+# turn all integer classes to numeric classes
+integerToNumeric <- classes %>% dplyr::filter(currentClass=="integer") %>% dplyr::select(Feature) %>% t() %>% as.vector()
+
+p3data[integerToNumeric] <- data.frame(lapply(p3data[integerToNumeric], as.numeric))
+
+# update classes data.frame
+classes <- classID(x)
+
+# identify and store features that need to change class
+numericToFactor <- classes %>% dplyr::filter(currentClass!=desiredClass, currentClass=="numeric") %>% dplyr::select(Feature) %>% t() %>% as.vector()
+
+factorToNumeric <- classes %>% dplyr::filter(currentClass!=desiredClass, currentClass=="factor") %>% dplyr::select(Feature) %>% t() %>% as.vector()
+
+# change current feature classes to desired classes
+p3data[numericToFactor] <- data.frame(lapply(p3data[numericToFactor], factor))
+
+p3data[factorToNumeric] <- data.frame(lapply(p3data[factorToNumeric], function(x) as.numeric(as.character(x))))
+
+#update classes data.frame
+classes <- classID(x)
+
+# verify all current classes are the same as desired classes
+verify <- classes %>% dplyr::filter(desiredClass != "NULL", !is.na(desiredClass)) %>% summarise(Accuracy = sum(currentClass==desiredClass) / n()) %>% as.numeric()
+
+paste0(verify*100, "% of current classes are now the same as the desired classes")
+```
+
+I also remove features from the feature set for the following three reasons:
+
+ - **Low Coverage**:  If a feature had over 80% of its values missing, it was removed from the feature set.  If there's barely any data in the feature, there is no use in including it in the model.  Even if it *were* a good predictor, you wouldn't have the data to make the prediction 80% of the time!
+ - **Too Many Levels**:  If a feature had >50 levels, it was removed from the feature set.  Generally, categorical features become ineffective as the number of levels increases.  If I wanted to reduce the number of levels (and wanted to spend the time to do so), it is possible to group certain levels together to reduce the number of levels.  
+ - **Manual Removal**:  I read through every feature description and manually identified whether or not I thought the feature should be included in the model.  This could introduce bias, but is a practical step.  Removing features that are identical but recorded in different formats (e.g. `SA_SCM_ID` and `MM_STATE_CODE`) or features that will obviously have no predictive value (e.g. document numbers like `SA_DOC_NBR_FMT` and `SA_DOC_NBR_NOVAL`) just makes sense.  
+
+```{r p3dataWrangle}
+# store all feature names that will be used in the model
+keepIn <- colnames(p3data)[colnames(p3data) %in% (p3descriptions %>% dplyr::select(`Field Name`) %>% t() %>% as.vector() %>% c("service_request_won"))]
+
+# identify features with less than 20% coverage
+lowCoverage <- p3data %>% summarise_each(funs(sum(is.na(.)))) > (nrow(p3data)*.80)
+lowCoverage <- colnames(lowCoverage)[lowCoverage == TRUE]
+
+# identify features with too many levels
+tooManyLevels <- classes %>% dplyr::filter(currentClass=="factor") %>% dplyr::select(Feature) %>% t() %>% as.vector()
+
+tooManyLevels <- data.frame(Feature = tooManyLevels, Levels = lapply(p3data[tooManyLevels], function(x) length(levels(x))) %>% unlist()) %>% dplyr::filter(Levels >= 50) %>% dplyr::select(Feature) %>% t() %>% as.vector()
+
+# identify features anthony did not want
+anthonyOut <- p3descriptions %>% dplyr::filter(`Anthony - In Out` == "Out") %>% dplyr::select(`Field Name`) %>% t() %>% as.vector()
+
+# remove unwanted features
+keepIn <- keepIn[!keepIn %in% lowCoverage]
+keepIn <- keepIn[!keepIn %in% tooManyLevels]
+keepIn <- keepIn[!keepIn %in% anthonyOut]
+
+# remove low coverage features from data
+p3data <- p3data %>% dplyr::select_(.dots = keepIn)
+p3data$service_request_won <- as.factor(p3data$service_request_won)
+```
+
+After removing features based on the above rules, there are now `p ncol(p3data)` features that will be used to develop a model.
+
+```{r p3biasCheck}
+# identify which variables would still be in the model if anthony did not intervene
+compare <- anthonyOut[!anthonyOut %in% lowCoverage]
+compare <- compare[!compare %in% tooManyLevels]
+compare
+```
+As a side note, only `r length(compare)` additional features would have been included in the model without my manual removal.  
+
+Next, missing values are imputed.
+
+```{r p3q1impute, cache=TRUE}
+# create training set
+train <- sample(1:nrow(p3data), nrow(p3data)*.8)
+
+# impute data for training set and test set
+# had to wrap function with invisible and capture output to hide ugly output of rfImpute
+invisible(capture.output(
+  train.data <- rfImpute(service_request_won ~ ., data = p3data[train,])
+  ))
+
+invisible(capture.output(
+  test.data <- rfImpute(service_request_won ~ ., data = p3data)
+  ))
+
+invisible(capture.output(
+  test.data <- test.data[-train,]
+  ))
+
+```
+
+Finally, a model is fit to the training data.  The model shows that the top five features used to predict whether or not a `service_requestion_won = 1` are:
+
+```{r p3q1train, cache=TRUE}
+# train model
+rf.model <- randomForest(service_request_won ~ .,
+                   data = train.data,
+                   mtry = 30,
+                   ntree = 500,
+                   importance = TRUE)
+
+# make predictions based on the new model
+train.predict <- predict(rf.model, newdata = train.data)
+test.predict <- predict(rf.model, newdata = test.data)
+
+# identify the most important features based on MeanDecreaseAccuracy (an OOB Bootstrap)
+importance <- importance(rf.model) %>% as.data.frame()
+importance <- importance %>% dplyr::mutate(Feature = rownames(importance)) %>% dplyr::select(Feature, `0`, `1`, MeanDecreaseAccuracy, MeanDecreaseGini)
+
+# print table
+kable(importance %>% dplyr::arrange(desc(MeanDecreaseAccuracy)) %>% dplyr::select(Feature, MeanDecreaseAccuracy, MeanDecreaseGini) %>% top_n(5))
+```
+
+### Question 2  
+#### Question 2.a  
+If given one day, I would use this random forest to predict the probabilities a homeowner would hire through BuildZoom.  This is one of (if not, the only) algorithm that can handle numeric, categorical, and missing data with ease.  
+
+#### Question 2.b  
+If given two weeks, I would improve the model in the following ways.
+
+ - Devise a k-fold cross validation scheme to train and validate my model, select an optimal tuning parameter, and test my model.
+ - Center and scale each numeric feature so as to not give incorrect  weights to features based on their magnitude.
+ - Determine ways to group categorical features that have many levels into fewer levels.
+ - Because the response is heavily skewed to 'no hire,' I would optimize my model to an F Score using precision and recall, not accuracy.
+ - Avoid feature selection questions, and aim only to optimize the F Score.  Seeking to find the 'causal' features is antiquated thinking.  Improving the win rate is the end goal.  Forgoing model interpretability for model accuracy (and thus higher win rates) is all that matters.  
+ - Build an ensemble of random forests.  
+ - Examine training and test errors to determine if more data or more features are needed.
+
+  
+  
+**If you have any further questions about this assignment, you can simply hire me.**
